@@ -65,7 +65,7 @@ class _CounterPageState extends State<CounterPage> {
             onPressed: _incrementCounter,
             tooltip: 'Increment',
             child: Icon(Icons.add),
-          ),
+          ),//Made a Row for Another Icon next to the + icon
           SizedBox(width: 10),
           FloatingActionButton(
             onPressed: _decrementCounter,
