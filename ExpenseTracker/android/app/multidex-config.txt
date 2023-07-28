@@ -1,0 +1,2 @@
+com/google/firebase/auth/FirebaseAuth
+com/google/firebase/auth/FirebaseUser
