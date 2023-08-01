@@ -13,6 +13,9 @@ class ExpenseScreen extends StatefulWidget {
 
 class _ExpenseScreenState extends State<ExpenseScreen> {
   List<Map<String, dynamic>> transactions = [];
+  bool isAscending = true; // Track the sorting order
+  bool showExpenses = true; // Track the visibility of expense transactions
+  bool showIncomes = true; // Track the visibility of income transactions
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final CollectionReference _transactionsCollection =
@@ -49,11 +52,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     });
   }
 
-  void addTransaction(String title, double amount, bool isExpense) {
+  void addTransaction(String title, double amount, bool isExpense, String notes) {
     final newTransaction = {
       'title': title,
       'amount': amount,
       'isExpense': isExpense,
+      'notes': notes, // Add this line to include notes
     };
 
     // Update the local list of transactions first
@@ -83,6 +87,38 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     });
   }
 
+  // Function to sort the transactions based on the selected order
+  void sortTransactions() {
+    setState(() {
+      if (isAscending) {
+        transactions.sort((a, b) => a['amount'].compareTo(b['amount']));
+      } else {
+        transactions.sort((a, b) => b['amount'].compareTo(a['amount']));
+      }
+    });
+  }
+
+  // Function to toggle between ascending and descending order
+  void toggleSortOrder() {
+    setState(() {
+      isAscending = !isAscending;
+      sortTransactions();
+    });
+  }
+
+  // Function to filter transactions based on their type (expense or income)
+  List<Map<String, dynamic>> filterTransactions() {
+    if (showExpenses && showIncomes) {
+      return transactions; // Show all transactions
+    } else if (showExpenses) {
+      return transactions.where((transaction) => transaction['isExpense']).toList();
+    } else if (showIncomes) {
+      return transactions.where((transaction) => !transaction['isExpense']).toList();
+    } else {
+      return []; // No transactions to show
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,10 +128,43 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
+            fontSize: 24,
           ),
         ),
         centerTitle: true,
         backgroundColor: Colors.deepPurple,
+        actions: [
+          IconButton(
+            icon: Icon(
+              isAscending ? Icons.arrow_upward : Icons.arrow_downward,
+              color: Colors.white,
+            ),
+            onPressed: toggleSortOrder,
+          ),
+          PopupMenuButton(
+            onSelected: (value) {
+              setState(() {
+                if (value == 'expenses') {
+                  showExpenses = !showExpenses;
+                } else if (value == 'incomes') {
+                  showIncomes = !showIncomes;
+                }
+              });
+            },
+            itemBuilder: (context) => [
+              CheckedPopupMenuItem(
+                value: 'expenses',
+                checked: showExpenses,
+                child: Text('Show Expenses'),
+              ),
+              CheckedPopupMenuItem(
+                value: 'incomes',
+                checked: showIncomes,
+                child: Text('Show Incomes'),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -111,41 +180,69 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 ),
                 Text(
                   '\$${getTotalAmount().toStringAsFixed(2)}',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
           ),
           Expanded(
             child: ListView.builder(
-              itemCount: transactions.length,
+              itemCount: filterTransactions().length, // Use the filtered transactions
               itemBuilder: (context, index) {
-                final transaction = transactions[index];
-                return Card(
-                  margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: ListTile(
-                    leading: transaction['isExpense']
-                        ? Icon(Icons.remove, color: Colors.red)
-                        : Icon(Icons.add, color: Colors.green),
-                    title: Text(transaction['title']),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '\$${transaction['amount'].toStringAsFixed(2)}',
-                          style: TextStyle(
-                            color: transaction['isExpense']
-                                ? Colors.red
-                                : Colors.green,
+                final transaction = filterTransactions()[index]; // Use the filtered transactions
+                return Dismissible(
+                  key: Key(transaction['docId']),
+                  direction: DismissDirection.endToStart,
+                  onDismissed: (direction) {
+                    deleteTransaction(index);
+                  },
+                  background: Container(
+                    color: Colors.red,
+                    alignment: Alignment.centerRight,
+                    padding: EdgeInsets.only(right: 16),
+                    child: Icon(Icons.delete, color: Colors.white),
+                  ),
+                  child: Card(
+                    margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: ListTile(
+                      leading: transaction['isExpense']
+                          ? Icon(Icons.remove, color: Colors.red, size: 36)
+                          : Icon(Icons.add, color: Colors.green, size: 36),
+                      title: Text(
+                        transaction['title'],
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: transaction['notes'] != null
+                          ? Text(
+                        transaction['notes'],
+                        style: TextStyle(
+                          fontSize: 16,
+                        ),
+                      )
+                          : null, // Show the notes as a subtitle
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '\$${transaction['amount'].toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: transaction['isExpense'] ? Colors.red : Colors.green,
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.delete),
-                          onPressed: () {
-                            deleteTransaction(index);
-                          },
-                        ),
-                      ],
+                          SizedBox(height: 4),
+                          Text(
+                            transaction['isExpense'] ? 'Expense' : 'Income',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: transaction['isExpense'] ? Colors.red : Colors.green,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -171,7 +268,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 }
 
 class AddTransactionModal extends StatefulWidget {
-  final Function(String, double, bool) onTransactionAdded;
+  final Function(String, double, bool, String) onTransactionAdded; // Update this line
 
   AddTransactionModal({required this.onTransactionAdded});
 
@@ -183,6 +280,7 @@ class _AddTransactionModalState extends State<AddTransactionModal> {
   late String title;
   late double amount;
   late bool isExpense;
+  late String notes; // Add this line
 
   @override
   void initState() {
@@ -190,6 +288,7 @@ class _AddTransactionModalState extends State<AddTransactionModal> {
     title = '';
     amount = 0;
     isExpense = true;
+    notes = ''; // Add this line
   }
 
   @override
@@ -204,9 +303,18 @@ class _AddTransactionModalState extends State<AddTransactionModal> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            Text(
+              'Add Transaction',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 16),
             TextField(
               decoration: InputDecoration(
                 labelText: 'Title',
+                labelStyle: TextStyle(fontSize: 18),
               ),
               onChanged: (value) {
                 setState(() {
@@ -217,12 +325,12 @@ class _AddTransactionModalState extends State<AddTransactionModal> {
             SizedBox(height: 16),
             Row(
               children: <Widget>[
-                Text('Type: '),
+                Text('Type:', style: TextStyle(fontSize: 18)),
                 SizedBox(width: 8),
                 ToggleButtons(
                   children: <Widget>[
-                    Text('Expense'),
-                    Text('Income'),
+                    Text('Expense', style: TextStyle(fontSize: 16)),
+                    Text('Income', style: TextStyle(fontSize: 16)),
                   ],
                   isSelected: [isExpense, !isExpense],
                   onPressed: (index) {
@@ -238,6 +346,7 @@ class _AddTransactionModalState extends State<AddTransactionModal> {
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 labelText: 'Amount',
+                labelStyle: TextStyle(fontSize: 18),
               ),
               onChanged: (value) {
                 setState(() {
@@ -246,17 +355,36 @@ class _AddTransactionModalState extends State<AddTransactionModal> {
               },
             ),
             SizedBox(height: 16),
+            TextField(
+              // Add this TextField for the notes
+              decoration: InputDecoration(
+                labelText: 'Notes', // Change the label text as desired
+                labelStyle: TextStyle(fontSize: 18),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  notes = value;
+                });
+              },
+            ),
+            SizedBox(height: 16),
             ElevatedButton(
               onPressed: title.isEmpty || amount <= 0
                   ? null
                   : () {
-                widget.onTransactionAdded(title, amount, isExpense);
+                widget.onTransactionAdded(title, amount, isExpense, notes); // Include notes in the callback
                 Navigator.of(context).pop();
               },
-              child: Text('Add Transaction'),
+              child: Text(
+                'Add Transaction',
+                style: TextStyle(
+                  fontSize: 18,
+                ),
+              ),
               style: ElevatedButton.styleFrom(
                 primary: Colors.deepPurple,
                 textStyle: TextStyle(color: Colors.white),
+                padding: EdgeInsets.symmetric(vertical: 16),
               ),
             ),
           ],

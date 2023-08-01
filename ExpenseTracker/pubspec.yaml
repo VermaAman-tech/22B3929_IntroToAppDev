@@ -38,6 +38,12 @@ dependencies:
   firebase_auth: ^4.7.2
   firebase_core: ^2.15.0
   cloud_firestore: ^4.8.4
+#  fl_chart: ^0.40.0
+  flutter_riverpod: ^1.0.3
+
+#  syncfusion_flutter_charts: ^22.2.5
+
+#  flutter_charts: ^0.5.1
 #  flutter_multidex: ^2.0.1
 
 dev_dependencies:
